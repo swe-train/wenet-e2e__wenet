@@ -20,7 +20,7 @@ import math
 import torch
 import torch.nn as nn
 from wenet.transformer.attention import MultiHeadedAttention
-from typing import Tuple
+from typing import Optional, Tuple
 
 
 class RelPositionMultiHeadedAttention(MultiHeadedAttention):
@@ -150,8 +150,8 @@ class RelPositionMultiHeadedAttention(MultiHeadedAttention):
         value: torch.Tensor,
         mask: torch.Tensor = torch.ones((0, 0, 0), dtype=torch.bool),
         pos_emb: torch.Tensor = torch.empty(0),
-        cache: torch.Tensor = torch.zeros((0, 0, 0, 0))
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        kv_cache: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """Compute 'Scaled Dot Product Attention' with rel. positional encoding.
         Args:
             query (torch.Tensor): Query tensor (#batch, time1, size).
@@ -193,15 +193,14 @@ class RelPositionMultiHeadedAttention(MultiHeadedAttention):
         # >>> torch.equal(b, c)        # True
         # >>> d = torch.split(a, 2, dim=-1)
         # >>> torch.equal(d[0], d[1])  # True
-        if cache.size(0) > 0:
-            key_cache, value_cache = torch.split(cache,
-                                                 cache.size(-1) // 2,
-                                                 dim=-1)
+        if kv_cache is not None:
+            key_cache, value_cache = kv_cache
             k = torch.cat([key_cache, k], dim=2)
             v = torch.cat([value_cache, v], dim=2)
+
         # NOTE(xcsong): We do cache slicing in encoder.forward_chunk, since it's
         #   non-trivial to calculate `next_cache_start` here.
-        new_cache = torch.cat((k, v), dim=-1)
+        new_cache = (k, v)
 
         n_batch_pos = pos_emb.size(0)
         p = self.linear_pos(pos_emb).view(n_batch_pos, -1, self.h, self.d_k)

@@ -112,9 +112,10 @@ class BranchformerEncoderLayer(torch.nn.Module):
         mask: torch.Tensor,
         pos_emb: torch.Tensor,
         mask_pad: torch.Tensor = torch.ones((0, 0, 0), dtype=torch.bool),
-        att_cache: torch.Tensor = torch.zeros((0, 0, 0, 0)),
+        kv_cache: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         cnn_cache: torch.Tensor = torch.zeros((0, 0, 0, 0)),
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, Tuple[torch.Tensor, torch.Tensor],
+               torch.Tensor]:
         """Compute encoded features.
 
         Args:
@@ -146,7 +147,9 @@ class BranchformerEncoderLayer(torch.nn.Module):
             stoch_layer_coeff = 1.0 / (1 - self.stochastic_depth_rate)
 
         if skip_layer:
-            return x, mask, att_cache, cnn_cache
+            if kv_cache is None:
+                kv_cache = (torch.zeros(0, 0, 0, 0), torch.zeros(0, 0, 0, 0))
+            return x, mask, kv_cache, cnn_cache
 
         # Two branches
         x1 = x
@@ -155,9 +158,11 @@ class BranchformerEncoderLayer(torch.nn.Module):
         # Branch 1: multi-headed attention module
         if self.attn is not None:
             x1 = self.norm_mha(x1)
-            x_att, new_att_cache = self.attn(x1, x1, x1, mask, pos_emb,
-                                             att_cache)
+            x_att, new_kv_cache = self.attn(x1, x1, x1, mask, pos_emb,
+                                            kv_cache)
             x1 = self.dropout(x_att)
+        else:
+            new_kv_cache = (torch.zeros(0, 0, 0, 0), torch.zeros(0, 0, 0))
 
         # Branch 2: convolutional gating mlp
         # Fake new cnn cache here, and then change it in conv_module
@@ -231,4 +236,4 @@ class BranchformerEncoderLayer(torch.nn.Module):
 
         x = self.norm_final(x)
 
-        return x, mask, new_att_cache, new_cnn_cache
+        return x, mask, new_kv_cache, new_cnn_cache

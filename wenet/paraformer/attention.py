@@ -92,19 +92,18 @@ class MultiHeadedAttentionSANM(MultiHeadedAttention):
         mask: torch.Tensor = torch.ones((0, 0, 0), dtype=torch.bool),
         mask_pad: torch.Tensor = torch.ones((0, 0, 0), dtype=torch.bool),
         pos_emb: torch.Tensor = torch.empty(0),
-        cache: torch.Tensor = torch.zeros((0, 0, 0, 0)),
+        kv_cache: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         mask_shfit_chunk: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         q, k, v = self.forward_qkv(query, key, value)
-        if cache.size(0) > 0:
-            key_cache, value_cache = torch.split(cache,
-                                                 cache.size(-1) // 2,
-                                                 dim=-1)
+        if kv_cache is not None:
+            key_cache, value_cache = kv_cache
             k = torch.cat([key_cache, k], dim=2)
             v = torch.cat([value_cache, v], dim=2)
+
         # NOTE(Mddct): we need know fsmn_memory's cache, but paraformer is nonstreamming
         # refactor later if streaming model is available
-        new_cache = torch.cat((k, v), dim=-1)
+        new_cache = (k, v)
         fsmn_memory = self.forward_fsmn(v,
                                         mask=mask_pad,
                                         mask_shfit_chunk=mask_shfit_chunk)
@@ -138,15 +137,15 @@ class DummyMultiHeadSANM(MultiHeadedAttentionSANM):
         mask: torch.Tensor = torch.ones((0, 0, 0), dtype=torch.bool),
         mask_pad: torch.Tensor = torch.ones((0, 0, 0), dtype=torch.bool),
         pos_emb: torch.Tensor = torch.empty(0),
-        cache: torch.Tensor = torch.zeros((0, 0, 0, 0)),
+        kv_cache: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         mask_shfit_chunk: Optional[torch.Tensor] = None
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         query = query * mask_pad.transpose(1, 2)
         inputs = query
         x = inputs.transpose(1, 2)
         x = self.pad_fn(x)
         # TODO(Mddct): cache here for future streaming
-        cache: Optional[torch.Tensor] = None
+        cache = (torch.empty(0, 0, 0, 0), torch.empty(0, 0, 0, 0))
         x = self.fsmn_block(x)
         x = x.transpose(1, 2)
         if x.size(1) != inputs.size(1):

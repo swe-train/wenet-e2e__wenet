@@ -61,9 +61,10 @@ class TransformerEncoderLayer(nn.Module):
         mask: torch.Tensor,
         pos_emb: torch.Tensor,
         mask_pad: torch.Tensor = torch.ones((0, 0, 0), dtype=torch.bool),
-        att_cache: torch.Tensor = torch.zeros((0, 0, 0, 0)),
+        kv_cache: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         cnn_cache: torch.Tensor = torch.zeros((0, 0, 0, 0)),
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, Tuple[torch.Tensor, torch.Tensor],
+               torch.Tensor]:
         """Compute encoded features.
 
         Args:
@@ -90,7 +91,7 @@ class TransformerEncoderLayer(nn.Module):
         residual = x
         if self.normalize_before:
             x = self.norm1(x)
-        x_att, new_att_cache = self.self_attn(x, x, x, mask, cache=att_cache)
+        x_att, new_kv_cache = self.self_attn(x, x, x, mask, cache=kv_cache)
         x = residual + self.dropout(x_att)
         if not self.normalize_before:
             x = self.norm1(x)
@@ -103,7 +104,7 @@ class TransformerEncoderLayer(nn.Module):
             x = self.norm2(x)
 
         fake_cnn_cache = torch.zeros((0, 0, 0), dtype=x.dtype, device=x.device)
-        return x, mask, new_att_cache, fake_cnn_cache
+        return x, mask, new_kv_cache, fake_cnn_cache
 
 
 class ConformerEncoderLayer(nn.Module):
@@ -163,9 +164,10 @@ class ConformerEncoderLayer(nn.Module):
         mask: torch.Tensor,
         pos_emb: torch.Tensor,
         mask_pad: torch.Tensor = torch.ones((0, 0, 0), dtype=torch.bool),
-        att_cache: torch.Tensor = torch.zeros((0, 0, 0, 0)),
+        kv_cache: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         cnn_cache: torch.Tensor = torch.zeros((0, 0, 0, 0)),
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, Tuple[torch.Tensor, torch.Tensor],
+               torch.Tensor]:
         """Compute encoded features.
 
         Args:
@@ -202,8 +204,7 @@ class ConformerEncoderLayer(nn.Module):
         residual = x
         if self.normalize_before:
             x = self.norm_mha(x)
-        x_att, new_att_cache = self.self_attn(x, x, x, mask, pos_emb,
-                                              att_cache)
+        x_att, new_kv_cache = self.self_attn(x, x, x, mask, pos_emb, kv_cache)
         x = residual + self.dropout(x_att)
         if not self.normalize_before:
             x = self.norm_mha(x)
@@ -233,4 +234,4 @@ class ConformerEncoderLayer(nn.Module):
         if self.conv_module is not None:
             x = self.norm_final(x)
 
-        return x, mask, new_att_cache, new_cnn_cache
+        return x, mask, new_kv_cache, new_cnn_cache

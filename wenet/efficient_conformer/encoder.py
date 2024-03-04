@@ -401,17 +401,25 @@ class EfficientConformerEncoder(torch.nn.Module):
                 # The time step is not divisible by the downsampling multiple
                 att_cache_trunc = xs.size(1) + \
                     att_cache.size(2) // factor - pos_emb.size(1) + 1
-            xs, _, new_att_cache, new_cnn_cache = layer(
+            if att_cache.size(0) == 0:
+                kv_cache = None
+            else:
+                k, v = torch.split(att_cache[i:i + 1],
+                                   att_cache[i:i + 1].size(-1) // 2,
+                                   dim=-1)
+                k = k[i:i + 1, :, ::factor, :][:, :, att_cache_trunc:, :],
+                v = v[i:i + 1, :, ::factor, :][:, :, att_cache_trunc:, :],
+                kv_cache = (k, v)
+
+            xs, _, new_kv_cache, new_cnn_cache = layer(
                 xs,
                 att_mask,
                 pos_emb,
                 mask_pad=mask_pad,
-                att_cache=att_cache[i:i +
-                                    1, :, ::factor, :][:, :,
-                                                       att_cache_trunc:, :],
+                kv_cache=kv_cache,
                 cnn_cache=cnn_cache[i, :, :, :]
                 if cnn_cache.size(0) > 0 else cnn_cache)
-
+            new_att_cache = torch.cat(new_kv_cache, dim=-1)
             if i in self.stride_layer_idx:
                 # compute time dimension for next block
                 efficient_index = self.stride_layer_idx.index(i)

@@ -146,18 +146,19 @@ class AliParaformerEncoderLayer(TransformerEncoderLayer):
         mask: torch.Tensor,
         pos_emb: Optional[torch.Tensor] = None,
         mask_pad: torch.Tensor = torch.ones((0, 0, 0), dtype=torch.bool),
-        att_cache: torch.Tensor = torch.zeros((0, 0, 0, 0)),
+        kv_cache: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         cnn_cache: torch.Tensor = torch.zeros((0, 0, 0, 0)),
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, Tuple[torch.Tensor, torch.Tensor],
+               torch.Tensor]:
         residual = x
         if self.normalize_before:
             x = self.norm1(x)
-        x_att, new_att_cache = self.self_attn(
+        x_att, new_kv_cache = self.self_attn(
             x,
             x,
             x,
             mask,
-            cache=att_cache,
+            kv_cache=kv_cache,
             mask_pad=mask_pad,
         )
         if self.in_size == self.size:
@@ -176,7 +177,7 @@ class AliParaformerEncoderLayer(TransformerEncoderLayer):
             x = self.norm2(x)
 
         fake_cnn_cache = torch.zeros((0, 0, 0), dtype=x.dtype, device=x.device)
-        return x, mask, new_att_cache, fake_cnn_cache
+        return x, mask, new_kv_cache, fake_cnn_cache
 
 
 class SanmEncoder(BaseEncoder):
@@ -329,9 +330,10 @@ class SanmDecoderLayer(DecoderLayer):
         tgt_mask: torch.Tensor,
         memory: torch.Tensor,
         memory_mask: torch.Tensor,
-        cache: Optional[torch.Tensor] = None
+        kv_cache: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         residual = tgt
+        cache = kv_cache
         if self.normalize_before:
             tgt = self.norm1(tgt)
         tgt = self.feed_forward(tgt)
@@ -341,11 +343,11 @@ class SanmDecoderLayer(DecoderLayer):
             tgt_q_mask = tgt_mask
         else:
             # compute only the last frame query keeping dim: max_time_out -> 1
-            assert cache.shape == (
+            assert cache[0].shape == (
                 tgt.shape[0],
                 tgt.shape[1] - 1,
                 self.size,
-            ), "{cache.shape} == {(tgt.shape[0], tgt.shape[1] - 1, self.size)}"
+            ), "{cache[0].shape} == {(tgt.shape[0], tgt.shape[1] - 1, self.size)}"
             tgt_q = tgt[:, -1:, :]
             residual = residual[:, -1:, :]
             tgt_q_mask = tgt_mask[:, -1:, :]

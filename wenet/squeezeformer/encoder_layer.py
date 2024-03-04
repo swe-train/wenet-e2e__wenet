@@ -72,15 +72,15 @@ class SqueezeformerEncoderLayer(nn.Module):
         mask: torch.Tensor,
         pos_emb: torch.Tensor,
         mask_pad: torch.Tensor = torch.ones((0, 0, 0), dtype=torch.bool),
-        att_cache: torch.Tensor = torch.zeros((0, 0, 0, 0)),
+        kv_cache: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         cnn_cache: torch.Tensor = torch.zeros((0, 0, 0, 0)),
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, Tuple[torch.Tensor, torch.Tensor],
+               torch.Tensor]:
         # self attention module
         residual = x
         if self.normalize_before:
             x = self.layer_norm1(x)
-        x_att, new_att_cache = self.self_attn(x, x, x, mask, pos_emb,
-                                              att_cache)
+        x_att, new_kv_cache = self.self_attn(x, x, x, mask, pos_emb, kv_cache)
         if self.concat_after:
             x_concat = torch.cat((x, x_att), dim=-1)
             x = residual + self.concat_linear(x_concat)
@@ -118,4 +118,4 @@ class SqueezeformerEncoderLayer(nn.Module):
         if not self.normalize_before:
             x = self.layer_norm4(x)
 
-        return x, mask, new_att_cache, new_cnn_cache
+        return x, mask, new_kv_cache, new_cnn_cache

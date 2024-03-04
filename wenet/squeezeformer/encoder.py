@@ -371,15 +371,24 @@ class SqueezeformerEncoder(nn.Module):
                                             0.0)
 
             factor = self.calculate_downsampling_factor(i)
-
-            xs, _, new_att_cache, new_cnn_cache = layer(
+            if att_cache.size(0) == 0:
+                kv_cache = None
+            else:
+                k, v = torch.split(att_cache[i:i + 1],
+                                   att_cache[i:i + 1].size(-1) // 2,
+                                   dim=-1)
+                k = k[:, :, ::factor, :][:, :, :pos_emb.size(1) -
+                                         xs.size(1), :]
+                v = v[:, :, ::factor, :][:, :, :pos_emb.size(1) -
+                                         xs.size(1), :]
+                kv_cache = (k, v)
+            xs, _, new_kv_cache, new_cnn_cache = layer(
                 xs,
                 att_mask,
                 pos_emb,
-                att_cache=att_cache[i:i + 1][:, :, ::factor, :]
-                [:, :, :pos_emb.size(1) - xs.size(1), :]
-                if elayers > 0 else att_cache[:, :, ::factor, :],
+                kv_cache=kv_cache,
                 cnn_cache=cnn_cache[i] if cnn_cache.size(0) > 0 else cnn_cache)
+            new_att_cache = torch.cat(new_kv_cache, dim=-1)
             # NOTE(xcsong): After layer.forward
             #   shape(new_att_cache) is (1, head, attention_key_size, d_k * 2),
             #   shape(new_cnn_cache) is (b=1, hidden-dim, cache_t2)
